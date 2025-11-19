@@ -1,6 +1,7 @@
 import { StatusBar } from "expo-status-bar";
 import { useState, useEffect } from "react";
 import { View, StyleSheet, Dimensions, Text } from "react-native";
+import { Accelerometer } from "expo-sensors";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 const PLAYER_WIDTH = 50;
@@ -14,6 +15,18 @@ const BLOCK_HEIGHT = 40;
 
 export default function App() {
   const [playerX, setPlayerX] = useState((screenWidth - PLAYER_WIDTH) / 2);
+
+  useEffect(() => {
+    Accelerometer.setUpdateInterval(1000);
+
+    const subscription = Accelerometer.addListener(({x}) => {
+      console.log("Value of X:", x)
+      const move = x * 250
+      setPlayerX(prev => prev + move)
+    })
+
+    return () => subscription.remove();
+  }, [])
 
   return (
     <View style={styles.container}>
