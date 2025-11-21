@@ -27,9 +27,9 @@ export default function App() {
 
   const [fallingFruits, setFallingFruits] = useState([]);
   const [score, setScore] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
+  const [gameOver, setGameOver] = useState(false)
 
-  // Track basket movement for collision without re-renders
+
   basketX.addListener(({ value }) => {
     basketXRef.current = value;
     basketBoundsRef.current = {
@@ -40,7 +40,6 @@ export default function App() {
     };
   });
 
-  // Move basket with accelerometer using Animated
   useEffect(() => {
     if (gameOver) return;
 
@@ -56,7 +55,6 @@ export default function App() {
     return () => subscription.remove();
   }, [gameOver]);
 
-  // Fruits spawn + fall loop
   useEffect(() => {
     if (gameOver) return;
 
