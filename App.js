@@ -1,87 +1,178 @@
 import { StatusBar } from "expo-status-bar";
-import { useState, useEffect } from "react";
-import { View, StyleSheet, Dimensions, Text } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { View, StyleSheet, Dimensions, Text, TouchableWithoutFeedback, Image, Animated } from "react-native";
 import { Accelerometer } from "expo-sensors";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
-const PLAYER_WIDTH = 50;
-const PLAYER_HEIGHT = 50;
 
-const BULLET_WIDTH = 10;
-const BULLET_HEIGHT = 20;
+const BASKET_WIDTH = 100;
+const BASKET_HEIGHT = 60;
+const BASKET_Y = screenHeight - 120;
 
-const BLOCK_WIDTH = 40;
-const BLOCK_HEIGHT = 40;
+const FRUIT_SIZE = 50;
+const FRUIT_SPEED = 6;
+const SPAWN_RATE = 1200;
+
+const fruitImages = [
+  require("./assets/apple.avif"),
+  require("./assets/orange.webp"),
+  require("./assets/banana.jpeg"),
+  require("./assets/watermelon.jpeg"),
+];
 
 export default function App() {
-  const [playerX, setPlayerX] = useState((screenWidth - PLAYER_WIDTH) / 2);
+  const basketX = useRef(new Animated.Value((screenWidth - BASKET_WIDTH) / 2)).current;
+  const basketXRef = useRef((screenWidth - BASKET_WIDTH) / 2);
+  const basketBoundsRef = useRef({});
 
+  const [fallingFruits, setFallingFruits] = useState([]);
+  const [score, setScore] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+
+  // Track basket movement for collision without re-renders
+  basketX.addListener(({ value }) => {
+    basketXRef.current = value;
+    basketBoundsRef.current = {
+      left: value,
+      right: value + BASKET_WIDTH,
+      top: BASKET_Y,
+      bottom: BASKET_Y + BASKET_HEIGHT,
+    };
+  });
+
+  // Move basket with accelerometer using Animated
   useEffect(() => {
-    Accelerometer.setUpdateInterval(1000);
+    if (gameOver) return;
 
-    const subscription = Accelerometer.addListener(({x}) => {
-      console.log("Value of X:", x)
-      const move = x * 250
-      setPlayerX(prev => prev + move)
-    })
+    Accelerometer.setUpdateInterval(16);
+    const subscription = Accelerometer.addListener(({ x }) => {
+      Animated.timing(basketX, {
+        toValue: Math.max(0, Math.min(screenWidth - BASKET_WIDTH, basketXRef.current - x * 35)),
+        duration: 16,
+        useNativeDriver: false,
+      }).start();
+    });
 
     return () => subscription.remove();
-  }, [])
+  }, [gameOver]);
+
+  // Fruits spawn + fall loop
+  useEffect(() => {
+    if (gameOver) return;
+
+    const spawnInterval = setInterval(() => {
+      setFallingFruits(prev => [
+        ...prev,
+        {
+          id: Date.now(),
+          image: fruitImages[Math.floor(Math.random() * fruitImages.length)],
+          x: Math.random() * (screenWidth - FRUIT_SIZE),
+          y: -FRUIT_SIZE,
+        }
+      ]);
+    }, SPAWN_RATE);
+
+    const moveInterval = setInterval(() => {
+      setFallingFruits(prev =>
+        prev.reduce((acc, f) => {
+          const moved = { ...f, y: f.y + FRUIT_SPEED };
+
+          const b = basketBoundsRef.current;
+          const caught =
+            moved.x < b.right &&
+            moved.x + FRUIT_SIZE > b.left &&
+            moved.y + FRUIT_SIZE > b.top &&
+            moved.y < b.bottom;
+
+          if (caught) {
+            setScore(s => s + 1);
+            return acc;
+          }
+
+          if (moved.y > screenHeight) {
+            setGameOver(true);
+            return acc;
+          }
+
+          acc.push(moved);
+          return acc;
+        }, [])
+      );
+    }, 16);
+
+    return () => {
+      clearInterval(spawnInterval);
+      clearInterval(moveInterval);
+    };
+  }, [gameOver]);
+
+  const resetGame = () => {
+    setScore(0);
+    setFallingFruits([]);
+    setGameOver(false);
+
+    basketXRef.current = (screenWidth - BASKET_WIDTH) / 2;
+    basketX.setValue(basketXRef.current);
+  };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.player, { left: playerX }]} />
-      <Text style={styles.instruction}>Tilt your phone to move</Text>
-    </View>
+    <TouchableWithoutFeedback onPress={gameOver ? resetGame : null}>
+      <View style={styles.container}>
+
+        <Animated.Image
+          source={require("./assets/basket.jpeg")}
+          style={[styles.basket, { left: basketX, top: BASKET_Y }]}
+        />
+
+        {fallingFruits.map(fruit => (
+          <Image
+            key={fruit.id}
+            source={fruit.image}
+            style={[styles.fruit, { left: fruit.x, top: fruit.y }]}
+          />
+        ))}
+
+        <Text style={styles.score}>Score: {score}</Text>
+
+        {gameOver && <Text style={styles.gameOverText}>GAME OVER - Tap to Restart</Text>}
+
+        <StatusBar style="light" />
+      </View>
+    </TouchableWithoutFeedback>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: "transparent",
     justifyContent: "flex-end",
     alignItems: "center",
-    paddingBottom: 60,
   },
-  player: {
+  basket: {
     position: "absolute",
-    bottom: 20,
-    width: PLAYER_WIDTH,
-    height: PLAYER_HEIGHT,
-    backgroundColor: "#FFF",
-    borderWidth: 2,
-    borderColor: "#000",
+    width: BASKET_WIDTH,
+    height: BASKET_HEIGHT,
+    resizeMode: "contain",
   },
-  instruction: {
+  fruit: {
     position: "absolute",
-    top: 70,
-    color: "#fff",
-    fontFamily: "Courier",
-    fontSize: 14,
+    width: FRUIT_SIZE,
+    height: FRUIT_SIZE,
+    resizeMode: "contain",
   },
-  bullet: {
+  score: {
     position: "absolute",
-    width: BULLET_WIDTH,
-    height: BULLET_HEIGHT,
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#000",
-  },
-  fallingBlock: {
-    position: "absolute",
-    width: BLOCK_WIDTH,
-    height: BLOCK_HEIGHT,
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "black",
+    top: 40,
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#FFD700",
   },
   gameOverText: {
     position: "absolute",
-    top: screenHeight / 2 - 40,
-    color: "#FFF",
-    fontSize: 24,
+    top: screenHeight / 2 - 50,
+    fontSize: 28,
     fontWeight: "bold",
-    fontFamily: "Courier",
+    color: "#ff3333",
   },
 });
